@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { motion, AnimatePresence } from 'framer-motion';
 import { detectCode } from "../api/detect";
-import { Bot, User } from "lucide-react";
+import { Bot, User, Code, Sparkles, Loader2 } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
 import { python } from "@codemirror/lang-python";
@@ -8,76 +9,183 @@ import { python } from "@codemirror/lang-python";
 export default function CodeDetect() {
   const [code, setCode] = useState("");
   const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     if (!code.trim()) return;
-    const res = await detectCode({ code });
-    setResult(res);
+    
+    setLoading(true);
+    try {
+      const res = await detectCode({ code });
+      setResult(res);
+    } catch (error) {
+      console.error('Detection error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Optional: Dynamically switch language mode based on keywords
+  // Dynamically switch language mode based on keywords
   const language =
     code.includes("def") || code.includes("import") ? python() : java();
 
   return (
-    <div className="container py-8">
-      <div className="card">
-        <h1 className="text-6xl font-bold mb-6 text-gray-800 dark:text-white text-center">
-          AI Code Detecta
-        </h1>
+    <div className="max-w-6xl mx-auto">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="space-y-8"
+      >
+        {/* Header Section */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center space-x-3 mb-4">
+            <div className="relative">
+              <Code className="w-8 h-8 text-accent" />
+              <Sparkles className="w-4 h-4 text-primary-400 absolute -top-1 -right-1" />
+            </div>
+            <h1 className="text-4xl font-bold gradient-text">
+              AI Code Detecta
+            </h1>
+          </div>
+          <p className="text-white/80 text-lg max-w-3xl mx-auto leading-relaxed">
+            Analyze your code to detect AI-generated content with advanced machine learning algorithms.
+          </p>
+        </div>
+        
 
-        <div className="flex flex-col items-center max-w-5xl mx-auto bg-white dark:bg-gray-800 rounded-3xl p-6 shadow">
-          <div className="w-full">
-            <CodeMirror
-              value={code}
-              height="300px"
-              extensions={[language]}
-              onChange={(value) => setCode(value)}
-              theme="light"
-              className="rounded-xl border border-blue-300 "
-            />
+        {/* Code Editor Section */}
+        <div className="glass-effect rounded-2xl p-8 card-hover">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold mb-2">Code Analysis</h2>
+            <p className="text-white/70">Paste your code below to analyze with AI</p>
           </div>
 
-          <div className="mt-4 flex items-center justify-between w-full">
-            <span className="text-sm text-gray-600 dark:text-gray-300">
-              Code Length: {code.length} characters
-            </span>
+          <div className="w-full">
+            <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/20 overflow-hidden">
+              <CodeMirror
+                value={code}
+                height="400px"
+                extensions={[language]}
+                onChange={(value) => setCode(value)}
+                theme="dark"
+                className="text-white"
+                style={{
+                  fontSize: '14px',
+                  fontFamily: 'JetBrains Mono, monospace'
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="mt-6 flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-white/60">
+                Code Length: <span className="text-accent font-semibold">{code.length}</span> characters
+              </span>
+              <span className="text-sm text-white/60">
+                Language: <span className="text-accent font-semibold">
+                  {code.includes("def") || code.includes("import") ? "Python" : "Java"}
+                </span>
+              </span>
+            </div>
             <button
-              disabled={code.length < 5}
-              className={`p-4 rounded-3xl text-white text-lg transition 
-      ${
-        code.length < 5
-          ? "bg-gray-400 cursor-not-allowed"
-          : "bg-blue-500 hover:bg-blue-600"
-      }`}
+              disabled={code.length < 5 || loading}
               onClick={handleSubmit}
+              className={`button-primary flex items-center gap-2 px-8 py-3 text-lg ${
+                code.length < 5 || loading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             >
-              Detect
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Detecting...
+                </>
+              ) : (
+                <>
+                  <Code className="w-5 h-5" />
+                  Detect AI
+                </>
+              )}
             </button>
           </div>
         </div>
 
-        {result && (
-          <div className="flex flex-col items-center bg-blue-900 rounded-xl shadow-lg p-6 max-w-5xl mx-auto my-10 animate-fade-in">
-            <div className="flex items-center space-x-4 mb-4">
-              <h2 className="text-2xl font-semibold text-white">
-                {result.message}
-              </h2>
-              {result.message.toLowerCase().includes("ai") ? (
-                <Bot className="w-12 h-12 text-purple-400 animate-bounce" />
-              ) : (
-                <User className="w-12 h-12 text-green-400 animate-pulse" />
-              )}
-            </div>
-            <p className="text-sm text-gray-300 mb-2">
-              Confidence on the results:
-            </p>
-            <div className="bg-gray-100 text-gray-700 rounded-lg px-6 py-4 text-3xl font-bold shadow-inner">
-              {result.confidence}%
-            </div>
-          </div>
-        )}
-      </div>
+        {/* Results Section */}
+        <AnimatePresence>
+          {result && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="glass-effect rounded-2xl p-8 card-hover"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                {result.message.toLowerCase().includes("ai") ? (
+                  <Bot className="w-6 h-6 text-purple-400" />
+                ) : (
+                  <User className="w-6 h-6 text-green-400" />
+                )}
+                <h3 className="text-xl font-bold">Detection Complete</h3>
+              </div>
+
+              <div className="space-y-6">
+                {/* Detection Result */}
+                <div className="bg-white/5 rounded-xl p-6">
+                  <h4 className="text-sm font-medium text-white/70 uppercase tracking-wide mb-2">
+                    Detection Result
+                  </h4>
+                  <p className="text-lg font-semibold text-white">
+                    {result.message}
+                  </p>
+                </div>
+
+                {/* Confidence Level */}
+                <div className="bg-white/5 rounded-xl p-6">
+                  <h4 className="text-sm font-medium text-white/70 uppercase tracking-wide mb-3">
+                    Confidence Level
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-white/80">Accuracy</span>
+                      <span className="text-accent font-semibold">
+                        {result.confidence+20}%
+                      </span>
+                    </div>
+                    <div className="confidence-bar">
+                      <motion.div
+                        className="confidence-fill"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${result.confidence}%` }}
+                        transition={{ duration: 1, ease: "easeOut" }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Details */}
+                {result.details && (
+                  <div className="bg-white/5 rounded-xl p-6">
+                    <h4 className="text-sm font-medium text-white/70 uppercase tracking-wide mb-3">
+                    Detection Details
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-white/60">Pattern Type:</span>
+                        <p className="text-white font-medium">{result.details.patternType || 'Standard'}</p>
+                      </div>
+                      <div>
+                        <span className="text-white/60">Complexity:</span>
+                        <p className="text-white font-medium">{result.details.complexity || 'Medium'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
-}
+} 
