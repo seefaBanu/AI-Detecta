@@ -1,7 +1,8 @@
-import numpy as np
-from tensorflow.keras.models import load_model
-import joblib
 import os
+import numpy as np
+import joblib
+import gdown
+from tensorflow.keras.models import load_model
 from pydub import AudioSegment
 import librosa
 
@@ -9,15 +10,34 @@ import librosa
 SAMPLE_RATE = 16000
 DURATION = 5  # seconds
 N_MFCC = 12
-OUTPUT_DIR = "/tmp"  # temporary conversion
+OUTPUT_DIR = "/tmp"  # temp storage
 
-# Load once globally
-MODEL_PATH = "/Users/seefabanu/Desktop/AI-Detecta/backend/models/artifacts/audio_cnn_model.h5"
-SCALER_PATH = "/Users/seefabanu/Desktop/AI-Detecta/backend/models/artifacts/audio_scaler.pkl"
+# Google Drive file IDs
+SCALER_FILE_ID = "1FtS3_Hcko5J97UL_eMhv0Pasf_AiYsbk"
+MODEL_FILE_ID = "1_WPnIe2QXVGELGeT4zsVtdZqAPEyL636"
+
+# Local paths
+MODEL_PATH = os.path.join("models", "artifacts", "audio_cnn_model.h5")
+SCALER_PATH = os.path.join("models", "artifacts", "audio_scaler.pkl")
+
+# Ensure artifacts directory exists
+os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+
+def download_from_gdrive(file_id, output_path):
+    if not os.path.exists(output_path):
+        url = f"https://drive.google.com/uc?id={file_id}"
+        print(f"Downloading {output_path} from Google Drive...")
+        gdown.download(url, output_path, quiet=False)
+        print("Download complete.")
+
+# Download model and scaler if missing
+download_from_gdrive(SCALER_FILE_ID, SCALER_PATH)
+download_from_gdrive(MODEL_FILE_ID, MODEL_PATH)
+
+# Load model and scaler once
 model = load_model(MODEL_PATH)
 scaler = joblib.load(SCALER_PATH)
 
-# Helper: Convert to wav
 def convert_to_wav(uploaded_file, output_dir=OUTPUT_DIR):
     try:
         filename = "temp.wav"
@@ -30,7 +50,6 @@ def convert_to_wav(uploaded_file, output_dir=OUTPUT_DIR):
         print(f"Error converting audio: {e}")
         return None
 
-# Helper: Normalize audio
 def normalize_audio(audio, sr=SAMPLE_RATE, duration=DURATION):
     try:
         audio = librosa.resample(audio, orig_sr=sr, target_sr=SAMPLE_RATE)
@@ -39,13 +58,14 @@ def normalize_audio(audio, sr=SAMPLE_RATE, duration=DURATION):
             audio = audio[:target_length]
         else:
             audio = np.pad(audio, (0, target_length - len(audio)), mode='constant')
-        audio = audio / np.max(np.abs(audio)) if np.max(np.abs(audio)) != 0 else audio
+        max_abs = np.max(np.abs(audio))
+        if max_abs != 0:
+            audio = audio / max_abs
         return audio
     except Exception as e:
         print(f"Error normalizing audio: {e}")
         return None
 
-# Helper: Extract features
 def extract_audio_features(file_path):
     try:
         audio, sr = librosa.load(file_path, sr=SAMPLE_RATE)
@@ -65,7 +85,6 @@ def extract_audio_features(file_path):
         print(f"Feature extraction error: {e}")
         return None
 
-# 🔍 Main detect function (like your detect_code)
 def detect_audio(file):
     try:
         wav_path = convert_to_wav(file)

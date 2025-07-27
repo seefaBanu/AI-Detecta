@@ -4,12 +4,19 @@ from torchvision import transforms
 from torch.utils.data import Dataset
 import numpy as np
 import cv2
-import face_recognition
 import os
 from torch import nn
 from torchvision import models
+import gdown
 
-# Model definition
+# Constants
+IM_SIZE = 112
+MEAN = [0.485, 0.456, 0.406]
+STD = [0.229, 0.224, 0.225]
+MODEL_FILE_ID = '1gtiZDHZNfUH319zwgukQZxAEAv0JaFp3'
+MODEL_LOCAL_PATH = os.path.join('models', 'artifacts', 'video_model.pt')
+
+# Define the Model
 class Model(nn.Module):
     def __init__(self, num_classes, latent_dim=2048, lstm_layers=1, hidden_dim=2048, bidirectional=False):
         super(Model, self).__init__()
@@ -30,8 +37,8 @@ class Model(nn.Module):
         x_lstm, _ = self.lstm(x, None)
         return fmap, self.dp(self.linear1(x_lstm[:, -1, :]))
 
-# Dataset for video processing
-class validation_dataset(Dataset):
+# Dataset for Video
+class ValidationDataset(Dataset):
     def __init__(self, video_names, sequence_length=20, transform=None):
         self.video_names = video_names
         self.transform = transform
@@ -61,41 +68,46 @@ class validation_dataset(Dataset):
 
     def frame_extract(self, path):
         vidObj = cv2.VideoCapture(path)
-        success = 1
+        success = True
         while success:
             success, image = vidObj.read()
             if success:
                 yield image
 
-# Prediction function
-im_size = 112
-mean = [0.485, 0.456, 0.406]
-std = [0.229, 0.224, 0.225]
-sm = nn.Softmax(dim=1)
+# Transforms
+train_transforms = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.Resize((IM_SIZE, IM_SIZE)),
+    transforms.ToTensor(),
+    transforms.Normalize(MEAN, STD)
+])
 
-def predict(model, img):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# Prediction helper
+sm = nn.Softmax(dim=1)
+def predict(model, img, device):
     fmap, logits = model(img.to(device))
     logits = sm(logits)
     _, prediction = torch.max(logits, 1)
     confidence = logits[:, int(prediction.item())].item() * 100
     return [int(prediction.item()), confidence]
 
-# Initialize model and transforms
+# Download model from Google Drive if not present
+def ensure_model_downloaded():
+    if not os.path.exists(MODEL_LOCAL_PATH):
+        os.makedirs(os.path.dirname(MODEL_LOCAL_PATH), exist_ok=True)
+        url = f'https://drive.google.com/uc?id={MODEL_FILE_ID}'
+        print("Downloading model from Google Drive...")
+        gdown.download(url, MODEL_LOCAL_PATH, quiet=False)
+        print("Download complete.")
+
+# Initialize model once
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+ensure_model_downloaded()
 model = Model(2).to(device)
-# Update this path to where your model file is stored
-model_path = '/Users/seefabanu/Desktop/AI-Detecta/backend/models/artifacts/video_model.pt'
-model.load_state_dict(torch.load(model_path, map_location=device))
+model.load_state_dict(torch.load(MODEL_LOCAL_PATH, map_location=device))
 model.eval()
 
-train_transforms = transforms.Compose([
-    transforms.ToPILImage(),
-    transforms.Resize((im_size, im_size)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean, std)
-])
-
+# API function
 def detect_video(video_path):
     """
     Process a video file and return prediction result.
@@ -107,9 +119,9 @@ def detect_video(video_path):
     if not os.path.exists(video_path):
         raise FileNotFoundError("Video file not found")
 
-    video_dataset = validation_dataset([video_path], sequence_length=20, transform=train_transforms)
-    prediction = predict(model, video_dataset[0])
-    
+    video_dataset = ValidationDataset([video_path], sequence_length=20, transform=train_transforms)
+    prediction = predict(model, video_dataset[0], device)
+
     result = 'REAL' if prediction[0] == 1 else 'FAKE'
     return {
         'prediction': result,
